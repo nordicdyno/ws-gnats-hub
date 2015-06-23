@@ -18,9 +18,6 @@ type hub struct {
 
 	// Add topic subscription for connection
 	addSubscriber chan *Subscriber
-
-	// Registered Nsq Readers
-	//nsqReaders map[string]*NsqTopicReader // NSQ topic -> nsqReader
 }
 
 var messageHub = hub{
@@ -28,27 +25,34 @@ var messageHub = hub{
 	unregister:    make(chan *connection),
 	addSubscriber: make(chan *Subscriber),
 	connections:   make(map[*connection]bool),
-	//nsqReaders:    make(map[string]*NsqTopicReader),
 }
 
 func (h *hub) run() {
-	log.Printf("hub start of life\n")
+	if *Debug {
+		log.Println("hub start")
+	}
+
 	for {
 		select {
 		case c := <-h.register:
 			h.connections[c] = true
 
 		case c := <-h.unregister:
-			log.Println("h.unregister fired")
+			if *Debug {
+				log.Println("h.unregister fired")
+			}
 			delete(h.connections, c)
-			log.Println("connection deleted from hub's poll OK")
 			close(c.send)
 
 		case sub := <-h.addSubscriber:
-			log.Println("h.addSubscriber fired")
+			if *Debug {
+				log.Println("h.addSubscriber fired")
+			}
 			conn := sub.Conn
 			conn.nc.Subscribe(sub.Topic, func(msg *nats.Msg) {
-				log.Println(conn, "got message: ", string(msg.Data))
+				if *Debug {
+					log.Println("Connection", conn, "got message: ", string(msg.Data))
+				}
 
 				conn.send <- msg.Data
 			})

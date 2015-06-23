@@ -3,9 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
-	//"net/http"
 	"time"
-	//"io/ioutil"
 
 	"github.com/apcera/nats"
 	"github.com/gorilla/websocket"
@@ -39,7 +37,6 @@ type Subscriber struct {
 type SubMessage struct {
 	Event   string
 	Channel string `json:"channel"`
-	// Data    SubMessageData `json:"data"` // just ignore it
 }
 
 // write writes a message with the given message type and payload.
@@ -67,11 +64,16 @@ func (c *connection) processMessage(msg []byte) {
 		log.Println("ERROR: invalid JSON subscribe data" + string(msg))
 		return
 	}
-	log.Printf("message+: %v\n", message)
+	if *Debug {
+		log.Printf("message+: %v\n", message)
+	}
 
 	channel := DefaultChat + "." + message.Channel
 	s := Subscriber{Conn: c, Topic: channel}
-	log.Printf("send to channel: %v\n", s)
+
+	if *Debug {
+		log.Printf("send to channel: %v\n", s)
+	}
 	messageHub.addSubscriber <- &s
 }
 
@@ -94,11 +96,12 @@ func (c *connection) writer() {
 				return
 			}
 		case <-ticker.C:
-			log.Println("send Ping")
+			if *Debug {
+				log.Println("send Ping")
+			}
 			if err := c.write(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
 		}
 	}
-
 }

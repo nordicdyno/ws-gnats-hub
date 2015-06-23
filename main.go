@@ -7,26 +7,15 @@ package main
 // MAYBE: change topic/channels naming schema (add prefix, or allow real names)
 
 import (
-	//"bytes"
-	//"encoding/json"
 	"flag"
 	"io/ioutil"
-	//"fmt"
-	//"go/build"
-
 	"log"
 	"net/http"
-	//"os"
-	//"path/filepath"
-	//"strconv"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	//"github.com/guregu/kami"
-
 	"github.com/apcera/nats"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
-	//"github.com/guregu/kami"
 )
 
 var (
@@ -40,23 +29,6 @@ const (
 	DefaultChat = "match"
 )
 
-type PostMessage struct {
-	Channel string `json:"channel"`
-	//Data    json.RawMessage  `json:"data"`
-	Data map[string]interface{}
-}
-
-/*
-type PostMessageData struct {
-	Content        string
-	Timestamp      uint64
-	Type           string
-	UserEmail      string `json:"user_email"`
-	UserId         string `json:"user_id"`
-	UserProfileUrl string `json:"user_profile_url"`
-}
-*/
-
 func main() {
 	flag.Parse()
 
@@ -65,58 +37,58 @@ func main() {
 	router := gin.Default()
 
 	if *serve != "" {
+		// FIXME: process errors
 		router.LoadHTMLGlob(*serve + "/*")
-		//homeTempl := template.Must(template.ParseGlob("/*"))
+
 		servePath := "/resources/:page"
-		log.Println("servePath:", servePath)
+		if *Debug {
+			log.Println("servePath:", *serve, "on", servePath)
+		}
 		router.GET(servePath, func(c *gin.Context) {
 			page := c.Param("page")
-			log.Println("Serve", page)
+			if *Debug {
+				log.Println("Serve", page)
+			}
+
 			c.HTML(http.StatusOK, page, gin.H{
 				"Addr": c.Request.Host,
 			})
-			//log.Println(kami.Param(ctx, "page"))
-			// homeTempl.Execute(w, r.Host)
-			//homeTempl.ExecuteTemplate(w, kami.Param(ctx, "page"), r.Host)
 		})
 	}
 
+	// for now chat message event is hardcoded to 'chat_message'
 	router.POST("/channel/:channel/event/chat_message/", ginChatHandler)
 
 	router.GET("/socket/websocket", func(c *gin.Context) {
 		wsHandler(c.Writer, c.Request)
 	})
 	router.Run(*addr)
-	//	kami.Serve()
 }
 
 func ginChatHandler(c *gin.Context) {
 	body := c.Request.Body
 	defer body.Close()
+	// TODO: add http://golang.org/pkg/io/#LimitedReader
 	requestBody, err := ioutil.ReadAll(body)
 	if err != nil {
-		//panic("ERROR: can't read http body")
 		log.Println("ERROR: can't read http body")
 		c.JSON(400, gin.H{"error": "can't read http body"})
-		//http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	log.Println("requestBody:", string(requestBody))
 
-	var message PostMessage
-	c.Bind(&message)
 	channel := c.Param("channel")
 	channel = DefaultChat + "." + channel
 
-	log.Printf("postHandler/channel => %s\n", channel)
-	log.Printf("postHandler/message: %+v\n", message)
+	if *Debug {
+		log.Printf("postHandler/channel => %s\n", channel)
+		log.Printf("postHandler/message: %v\n", string(requestBody))
+	}
 
+	// FIXME: check errors here on every step
 	nc := natsConnect()
-
 	nc.Publish(channel, requestBody)
 	c.JSON(200, gin.H{})
-	//ncEnc, _ := nats.NewEncodedConn(nc, "json")
-	//ncEnc.Publish(channel, &message)
 }
 
 var upgrader = websocket.Upgrader{
@@ -138,7 +110,6 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	hdr := make(http.Header)
 	hdr["Access-Control-Allow-Origin"] = []string{"*"}
 	ws, err := upgrader.Upgrade(w, r, hdr)
-	// websocket.Upgrade(w, r, nil, 1024, 1024)
 	if _, ok := err.(websocket.HandshakeError); ok {
 		http.Error(w, "Not a websocket handshake", 400)
 		return
